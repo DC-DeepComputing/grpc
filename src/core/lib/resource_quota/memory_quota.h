@@ -40,6 +40,7 @@
 #include "src/core/lib/promise/poll.h"
 #include "src/core/lib/resource_quota/periodic_update.h"
 #include "src/core/lib/resource_quota/telemetry.h"
+#include "src/core/lib/slice/slice_refcount.h"
 #include "src/core/telemetry/instrument.h"
 #include "src/core/util/grpc_check.h"
 #include "src/core/util/orphanable.h"
@@ -412,6 +413,13 @@ class BasicMemoryQuota final
 // underlying resource quota.
 class GrpcMemoryAllocatorImpl final : public EventEngineMemoryAllocatorImpl {
  public:
+  // Size of the SliceRefCount header prepended to the payload by MakeSlice().
+  static constexpr size_t kSliceRefCountSize =
+      sizeof(grpc_slice_refcount) +
+      sizeof(std::shared_ptr<
+             grpc_event_engine::experimental::internal::MemoryAllocatorImpl>) +
+      sizeof(size_t);
+
   explicit GrpcMemoryAllocatorImpl(
       std::shared_ptr<BasicMemoryQuota> memory_quota);
   ~GrpcMemoryAllocatorImpl() override;

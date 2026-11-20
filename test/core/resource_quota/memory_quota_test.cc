@@ -167,6 +167,18 @@ TEST(MemoryQuotaTest, MakeSlice) {
   }
 }
 
+TEST(MemoryQuotaTest, MakeSliceWithSliceRefCountSize) {
+  ExecCtx exec_ctx;
+  MemoryQuota memory_quota(MakeRefCounted<channelz::ResourceQuotaNode>("foo"));
+  auto memory_allocator = memory_quota.CreateMemoryAllocator("bar");
+  constexpr size_t kBlockSize = 8192;
+  constexpr size_t kPayloadSize =
+      kBlockSize - GrpcMemoryAllocatorImpl::kSliceRefCountSize;
+  grpc_slice slice = memory_allocator.MakeSlice(MemoryRequest(kPayloadSize));
+  EXPECT_EQ(GRPC_SLICE_LENGTH(slice), kPayloadSize);
+  grpc_slice_unref(slice);
+}
+
 TEST(MemoryQuotaTest, ContainerAllocator) {
   ExecCtx exec_ctx;
   MemoryQuota memory_quota(MakeRefCounted<channelz::ResourceQuotaNode>("foo"));
