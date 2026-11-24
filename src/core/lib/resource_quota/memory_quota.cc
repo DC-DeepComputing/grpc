@@ -134,6 +134,10 @@ class SliceRefCount : public grpc_slice_refcount {
   size_t size_;
 };
 
+static_assert(sizeof(SliceRefCount) ==
+                  GrpcMemoryAllocatorImpl::kSliceRefCountSize,
+              "kSliceRefCountSize must match sizeof(SliceRefCount)");
+
 }  // namespace
 
 double ContainerMemoryPressure() {
@@ -404,14 +408,13 @@ void GrpcMemoryAllocatorImpl::Replenish() {
 }
 
 grpc_slice GrpcMemoryAllocatorImpl::MakeSlice(MemoryRequest request) {
-  auto size = Reserve(request.Increase(sizeof(SliceRefCount)));
+  auto size = Reserve(request.Increase(kSliceRefCountSize));
   void* p = gpr_malloc(size);
   new (p) SliceRefCount(shared_from_this(), size);
   grpc_slice slice;
   slice.refcount = static_cast<SliceRefCount*>(p);
-  slice.data.refcounted.bytes =
-      static_cast<uint8_t*>(p) + sizeof(SliceRefCount);
-  slice.data.refcounted.length = size - sizeof(SliceRefCount);
+  slice.data.refcounted.bytes = static_cast<uint8_t*>(p) + kSliceRefCountSize;
+  slice.data.refcounted.length = size - kSliceRefCountSize;
   return slice;
 }
 
