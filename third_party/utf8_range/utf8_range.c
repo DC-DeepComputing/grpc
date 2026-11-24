@@ -4,7 +4,11 @@
 // license that can be found in the LICENSE file or at
 // https://opensource.org/licenses/MIT.
 
-/* This is a wrapper for the Google range-sse.cc algorithm which checks whether
+/* RISC-V RVV backend added for SpacemiT X100/K3 (VLEN=256). Selected
+ * automatically when compiled with -march=rv64gcv* (__riscv_vector).
+ * See utf8_range_rvv.inc. x86 SSE4.1 / ARM NEON paths are unchanged.
+ *
+ * This is a wrapper for the Google range-sse.cc algorithm which checks whether
  * a sequence of bytes is a valid UTF-8 sequence and finds the longest valid
  * prefix of the UTF-8 sequence.
  *
@@ -20,6 +24,9 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <string.h>
+#if defined(__riscv_vector)
+#include <riscv_vector.h>
+#endif
 
 #if defined(__GNUC__)
 #define FORCE_INLINE_ATTR __attribute__((always_inline)) inline
@@ -137,7 +144,7 @@ static size_t utf8_range_ValidateUTF8Naive(const char* data, const char* end,
   return err_pos + (1 - return_position);
 }
 
-#if defined(__SSE4_1__) || (defined(__ARM_NEON) && defined(__ARM_64BIT_STATE))
+#if defined(__SSE4_1__) || (defined(__ARM_NEON) && defined(__ARM_64BIT_STATE)) || defined(__riscv_vector)
 /* Returns the number of bytes needed to skip backwards to get to the first
    byte of codepoint.
  */
@@ -159,10 +166,21 @@ static inline int utf8_range_CodepointSkipBackwards(int32_t codepoint_word) {
  */
 static inline const char* utf8_range_SkipAscii(const char* data,
                                                const char* end) {
+#if defined(__riscv_vector)
+  while (data < end) {
+    size_t vl = __riscv_vsetvl_e8m8(end - data);
+    vuint8m8_t v = __riscv_vle8_v_u8m8((const uint8_t*)data, vl);
+    vuint8m1_t mx = __riscv_vredmaxu_vs_u8m8_u8m1(
+        v, __riscv_vmv_v_x_u8m1(0, vl), vl);
+    if (__riscv_vmv_x_s_u8m1_u8(mx) > 0x7F) break;
+    data += vl;
+  }
+#else
   while (8 <= end - data &&
          (utf8_range_UnalignedLoad64(data) & 0x8080808080808080) == 0) {
     data += 8;
   }
+#endif
   while (data < end && utf8_range_AsciiIsAscii(*data)) {
     ++data;
   }
@@ -173,6 +191,8 @@ static inline const char* utf8_range_SkipAscii(const char* data,
 #include "utf8_range_sse.inc"
 #elif defined(__ARM_NEON) && defined(__ARM_64BIT_STATE)
 #include "utf8_range_neon.inc"
+#elif defined(__riscv_vector)
+#include "utf8_range_rvv.inc"
 #endif
 
 static FORCE_INLINE_ATTR size_t utf8_range_Validate(
@@ -189,7 +209,7 @@ static FORCE_INLINE_ATTR size_t utf8_range_Validate(
     return (return_position ? (data - data_original) : 0) +
            utf8_range_ValidateUTF8Naive(data, end, return_position);
   }
-#if defined(__SSE4_1__) || (defined(__ARM_NEON) && defined(__ARM_64BIT_STATE))
+#if defined(__SSE4_1__) || (defined(__ARM_NEON) && defined(__ARM_64BIT_STATE)) || defined(__riscv_vector)
   return utf8_range_ValidateUTF8Simd(
       data_original, data, end, return_position);
 #else

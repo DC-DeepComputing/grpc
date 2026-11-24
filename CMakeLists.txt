@@ -48,6 +48,10 @@ set(gRPC_BUILD_MSVC_MP_COUNT -1 CACHE STRING "The maximum number of processes fo
 
 # Options
 option(gRPC_BUILD_TESTS "Build tests" OFF)
+# Enable RVV SIMD backend for UTF-8 validation on RISC-V (SpacemiT X100/K3).
+# Adds -march=rv64gcv only to the utf8_range_lib target. Other targets and
+# non-RISC-V platforms are unaffected. Disable to fall back to scalar.
+option(gRPC_ENABLE_RVV_UTF8 "Enable RVV SIMD for UTF-8 validation (RISC-V)" ON)
 option(gRPC_BUILD_CODEGEN "Build codegen" ON)
 option(gRPC_DOWNLOAD_ARCHIVES "Download archives for empty 3rd party directories" ON)
 
@@ -4901,6 +4905,13 @@ endif()
 add_library(utf8_range_lib
   third_party/utf8_range/utf8_range.c
 )
+
+# RVV SIMD backend: only utf8_range_lib is built with vector extension.
+# __riscv_vector then selects the RVV kernel in utf8_range.c dispatch.
+if(gRPC_ENABLE_RVV_UTF8 AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(riscv|RISC-V)")
+  target_compile_options(utf8_range_lib PRIVATE -march=rv64gcv)
+  message(STATUS "gRPC: RVV UTF-8 SIMD enabled for utf8_range_lib (-march=rv64gcv)")
+endif()
 
 target_compile_features(utf8_range_lib PUBLIC cxx_std_17)
 

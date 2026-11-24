@@ -33,6 +33,7 @@ filegroup(
         "utf8_range.h",
         "utf8_range_neon.inc",
         "utf8_range_sse.inc",
+        "utf8_range_rvv.inc",
     ],
     visibility = ["//:__subpackages__"],
 )
@@ -46,7 +47,12 @@ cc_library(
         "utf8_range.h",
         "utf8_range_neon.inc",
         "utf8_range_sse.inc",
+        "utf8_range_rvv.inc",
     ],
+    copts = select({
+        "@platforms//cpu:riscv64": ["-march=rv64gcv"],
+        "//conditions:default": [],
+    }),
     strip_include_prefix = "/third_party/utf8_range",
 )
 
