@@ -35,10 +35,21 @@ static FORCE_INLINE_ATTR size_t utf8_range_ValidateUTF8Simd(
   // interleaved as [E0..EF values | F0..FF values] (vld2q_u8 result):
   //   index 0(E0)=2, index 13(ED)=3, index 16(F0)=3, index 20(F4)=4.
   const uint8_t range_adjust_tbl[32] = {
-      2,0,0,0,0,0,0,0,0,0,0,0,0,0,3,0,   // E0..EF
+      2,0,0,0,0,0,0,0,0,0,0,0,0,3,0,0,   // E0..EF
       3,0,0,0,4,0,0,0,0,0,0,0,0,0,0,0};  // F0..FF
 
   const size_t vl = __riscv_vsetvl_e8m2(64);
+
+  // Unlike the SSE/NEON backends (16-byte blocks), a 64-byte RVV block can
+  // leave a short remainder with zero full blocks to process.  The skip-back
+  // below would then run off prev_input == 0 and step before data_original
+  // (OOB read + caller-memory-dependent wrong result).  Validate scalar-only.
+  if ((size_t)(end - data) < vl) {
+    // Naive returns 0/1 when !return_position, err_pos otherwise: only add
+    // the ASCII prefix length when returning a position.
+    return (return_position ? (size_t)(data - data_original) : 0) +
+           utf8_range_ValidateUTF8Naive(data, end, return_position);
+  }
 
   // Load lookup tables into vector registers once.
   const vuint8m2_t vt_first_len   = __riscv_vle8_v_u8m2(first_len_tbl, vl);
